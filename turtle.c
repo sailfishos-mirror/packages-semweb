@@ -78,7 +78,6 @@ static atom_t ATOM_parse;
 static atom_t ATOM_statement;
 static atom_t ATOM_document;
 static atom_t ATOM_count;
-static atom_t ATOM_error_count;
 static atom_t ATOM_anon_prefix;
 static atom_t ATOM_base_uri;
 static atom_t ATOM_on_error;
@@ -3972,7 +3971,6 @@ install_turtle(void)
   MKATOM(statement);
   MKATOM(document);
   MKATOM(count);
-  MKATOM(error_count);
   MKATOM(anon_prefix);
   MKATOM(base_uri);
   MKATOM(on_error);
