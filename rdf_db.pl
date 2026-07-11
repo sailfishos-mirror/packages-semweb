@@ -1480,11 +1480,10 @@ concurrent(_, Goals, _) :-
 
 rdf_load(Spec, M:Options) :-
     must_be(list, Options),
-    current_prolog_flag(agc_margin, Old),
     setup_call_cleanup(
-        set_prolog_flag(agc_margin, 0),
+        push_prolog_flag(agc_margin, 0),
         rdf_load_noagc(Spec, M, Options),
-        set_prolog_flag(agc_margin, Old)).
+        pop_prolog_flag(agc_margin)).
 
 rdf_load_noagc(List, M, Options) :-
     is_list(List),

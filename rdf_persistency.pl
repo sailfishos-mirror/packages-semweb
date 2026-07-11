@@ -316,11 +316,10 @@ rdf_persistency_property_(directory(Dir)) :-
 %   garbage.
 
 no_agc(Goal) :-
-    current_prolog_flag(agc_margin, Old),
     setup_call_cleanup(
-        set_prolog_flag(agc_margin, 0),
+        push_prolog_flag(agc_margin, 0),
         Goal,
-        set_prolog_flag(agc_margin, Old)).
+        pop_prolog_flag(agc_margin)).
 
 
 %!  rdf_detach_db is det.
