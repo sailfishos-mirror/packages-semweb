@@ -2351,9 +2351,9 @@ rdf_subject_in_graph(Subject, DB) :-
 
 graph(Options0, DB) :-
     strip_module(Options0, _, Options),
-    (   memberchk(graph(DB0), Options)
+    (   option(graph(DB0), Options)
     ->  DB = DB0
-    ;   memberchk(db(DB0), Options)
+    ;   option(db(DB0), Options)
     ->  DB = DB0
     ;   true                            % leave unbound
     ).
@@ -2412,7 +2412,7 @@ rdf_save_header(Out, Options, OptionsOut) :-
         format(Out, '~N    xml:base="~w"~n', [BaseText])
     ;   true
     ),
-    (   memberchk(document_language(Lang), Options)
+    (   option(document_language(Lang), Options)
     ->  format(Out, '~N    xml:lang="~w"', [Lang])
     ;   true
     ),
@@ -2900,7 +2900,7 @@ save_attribute(tag, Name=literal(Value), BaseURI, Out, Indent, Options) :-
 save_attribute(body, Name=literal(Literal0), BaseURI, Out, Indent, Options) :-
     !,
     rdf_id(Name, BaseURI, NameText),
-    (   memberchk(convert_typed_literal(Converter), Options),
+    (   option(convert_typed_literal(Converter), Options),
         call(Converter, Type, Content, Literal0)
     ->  Literal = type(Type, Content)
     ;   Literal = Literal0
