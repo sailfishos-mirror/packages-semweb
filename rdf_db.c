@@ -153,7 +153,6 @@ static atom_t	ATOM_begin;
 static atom_t	ATOM_end;
 static atom_t	ATOM_error;
 static atom_t	ATOM_infinite;
-static atom_t	ATOM_snapshot;
 static atom_t	ATOM_true;
 static atom_t	ATOM_size;
 static atom_t	ATOM_optimize_threshold;
@@ -7053,6 +7052,11 @@ transaction_depth(const query *q)
 }
 
 
+static PL_option_t transaction_options[] =
+{ PL_OPTION("snapshot", OPT_TERM),
+  PL_OPTIONS_END
+};
+
 static foreign_t
 rdf_transaction(term_t goal, term_t id, term_t options)
 { int rc;
@@ -7063,37 +7067,26 @@ rdf_transaction(term_t goal, term_t id, term_t options)
   triple_buffer updated;
   snapshot *ss = NULL;
 
-  if ( !PL_get_nil(options) )
-  { term_t tail = PL_copy_term_ref(options);
-    term_t head = PL_new_term_ref();
-    term_t arg = PL_new_term_ref();
+  { term_t ss_opt = 0;
 
-    while( PL_get_list(tail, head, tail) )
-    { size_t arity;
-      atom_t name;
+    if ( !PL_scan_options(options, 0, "rdf_transaction_option",
+			  transaction_options, &ss_opt) )
+      return FALSE;
+    if ( ss_opt )
+    { if ( get_snapshot(ss_opt, &ss) )
+      { int ss_tid = snapshot_thread(ss);
 
-      if ( !PL_get_name_arity(head, &name, &arity) || arity != 1 )
-	return PL_type_error("option", head);
-      _PL_get_arg(1, head, arg);
+	if ( ss_tid && ss_tid != PL_thread_self() )
+	  PL_permission_error("access", "rdf-snapshot", ss_opt);
+      } else
+      { atom_t a;
 
-      if ( name == ATOM_snapshot )
-      { if ( get_snapshot(arg, &ss) )
-	{ int ss_tid = snapshot_thread(ss);
-
-	  if ( ss_tid && ss_tid != PL_thread_self() )
-	    PL_permission_error("access", "rdf-snapshot", arg);
-	} else
-	{ atom_t a;
-
-	  if ( PL_get_atom(arg, &a) && a == ATOM_true )
-	    ss = SNAPSHOT_ANONYMOUS;
-	  else
-	    return PL_type_error("rdf_snapshot", arg);
-	}
+	if ( PL_get_atom(ss_opt, &a) && a == ATOM_true )
+	  ss = SNAPSHOT_ANONYMOUS;
+	else
+	  return PL_type_error("rdf_snapshot", ss_opt);
       }
     }
-    if ( !PL_get_nil_ex(tail) )
-      return FALSE;
   }
 
   if ( !(q = open_transaction(db, &added, &deleted, &updated, ss)) )
@@ -9799,7 +9792,6 @@ install_rdf_db(void)
   ATOM_end		  = PL_new_atom("end");
   ATOM_error		  = PL_new_atom("error");
   ATOM_infinite		  = PL_new_atom("infinite");
-  ATOM_snapshot		  = PL_new_atom("snapshot");
   ATOM_true		  = PL_new_atom("true");
   ATOM_size		  = PL_new_atom("size");
   ATOM_optimize_threshold = PL_new_atom("optimize_threshold");

@@ -74,19 +74,12 @@ static functor_t FUNCTOR_type2;
 static functor_t FUNCTOR_pair2;
 static functor_t FUNCTOR_colon2;
 
-static atom_t ATOM_parse;
 static atom_t ATOM_statement;
 static atom_t ATOM_document;
-static atom_t ATOM_count;
-static atom_t ATOM_anon_prefix;
-static atom_t ATOM_base_uri;
-static atom_t ATOM_on_error;
 static atom_t ATOM_error;
 static atom_t ATOM_warning;
-static atom_t ATOM_format;
 static atom_t ATOM_turtle;
 static atom_t ATOM_trig;
-static atom_t ATOM_graph;
 static atom_t ATOM_auto;
 
 #define RDF_NS L"http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -3141,6 +3134,15 @@ unify_turtle_parser(term_t parser, turtle_state *ts)
 }
 
 
+static PL_option_t turtle_parser_options[] =
+{ PL_OPTION("base_uri",    OPT_TERM),
+  PL_OPTION("anon_prefix", OPT_TERM),
+  PL_OPTION("graph",       OPT_TERM),
+  PL_OPTION("format",      OPT_TERM),
+  PL_OPTION("on_error",    OPT_TERM),
+  PL_OPTIONS_END
+};
+
 static foreign_t
 create_turtle_parser(term_t parser, term_t in, term_t options)
 { IOSTREAM *stream;
@@ -3149,99 +3151,74 @@ create_turtle_parser(term_t parser, term_t in, term_t options)
   { turtle_state *ts;
 
     if ( (ts=new_turtle_parser(stream)) )
-    { term_t opt   = PL_new_term_ref();
-      term_t arg   = PL_new_term_ref();
-      term_t opts  = PL_copy_term_ref(options);
+    { term_t base_uri=0, anon_prefix=0, graph=0, format=0, on_error=0;
 
-      while(PL_get_list_ex(opts, opt, opts))
-      { atom_t name;
-	size_t arity;
-
-	if ( PL_get_name_arity(opt, &name, &arity) )
-	{ if ( arity == 1 )
-	  { _PL_get_arg(1, opt, arg);
-
-	    if ( name == ATOM_base_uri )		/* BASE_URI */
-	    { wchar_t *base_uri;
-	      resource *r;
-
-	      if ( PL_get_wchars(arg, NULL, &base_uri, CVT_ATOM|CVT_EXCEPTION) &&
-		   (r=new_resource(ts, base_uri)) &&
-		   set_base_uri(ts, r) )
-	      { free_resource(ts, r);
-		continue;
-	      }
-
-	      return FALSE;
-	    }
-	    if ( name == ATOM_anon_prefix )		/* ANON_PREFIX */
-	    { wchar_t *prefix;
-
-	      if ( PL_is_functor(arg, FUNCTOR_node1) )
-	      { if ( ts->bnode.prefix )
-		{ free(ts->bnode.prefix);
-		  ts->bnode.prefix = NULL;
-		}
-		continue;
-	      } else if ( PL_get_wchars(arg, NULL, &prefix,
-					CVT_ATOM|CVT_EXCEPTION) )
-	      { if ( ts->bnode.prefix )
-		  free(ts->bnode.prefix);
-		if ( (ts->bnode.prefix = wcsdup(prefix)) )
-		  continue;
-		return PL_resource_error("memory");
-	      }
-	      return FALSE;
-	    }
-	    if ( name == ATOM_graph )			/* GRAPH */
-	    { atom_t g;
-	      resource *r;
-
-	      if ( PL_get_atom_ex(arg, &g) &&
-		   (r=atom_resource(ts,g)) &&
-		   set_graph(ts, r, NULL) )
-		continue;
-	      return FALSE;
-	    }
-	    if ( name == ATOM_format )
-	    { atom_t d;
-
-	      if ( PL_get_atom_ex(arg, &d) )
-	      { if ( d == ATOM_turtle )
-		  ts->format = D_TURTLE;
-		else if ( d == ATOM_trig )
-		  ts->format = D_TRIG;
-		else if ( d == ATOM_auto )
-		  ts->format = D_AUTO;
-		else
-		  return PL_domain_error("format_option", arg);
-
-		continue;
-	      }
-	      return FALSE;
-	    }
-	    if ( name == ATOM_on_error )
-	    { atom_t mode;
-
-	      if ( PL_get_atom_ex(arg, &mode) )
-	      { if ( mode == ATOM_error )
-		  ts->on_error = E_ERROR;
-		else if ( mode == ATOM_warning )
-		  ts->on_error = E_WARNING;
-		else
-		  return PL_domain_error("on_error_option", arg);
-
-		continue;
-	      }
-	      return FALSE;
-	    }
-	    continue;			/* ignore unknown option */
-	  }
-	}
-	return PL_type_error("option", opt);
-      }
-      if ( PL_exception(0) || !PL_get_nil_ex(opts) )
+      if ( !PL_scan_options(options, 0, "turtle_option", turtle_parser_options,
+			    &base_uri, &anon_prefix, &graph, &format, &on_error) )
 	return FALSE;
+
+      if ( base_uri )
+      { wchar_t *b;
+	resource *r = NULL;
+
+	if ( !(PL_get_wchars(base_uri, NULL, &b, CVT_ATOM|CVT_EXCEPTION) &&
+	       (r=new_resource(ts, b)) &&
+	       set_base_uri(ts, r)) )
+	  return FALSE;
+	free_resource(ts, r);
+      }
+      if ( anon_prefix )
+      { wchar_t *prefix;
+
+	if ( PL_is_functor(anon_prefix, FUNCTOR_node1) )
+	{ if ( ts->bnode.prefix )
+	  { free(ts->bnode.prefix);
+	    ts->bnode.prefix = NULL;
+	  }
+	} else if ( PL_get_wchars(anon_prefix, NULL, &prefix,
+				  CVT_ATOM|CVT_EXCEPTION) )
+	{ if ( ts->bnode.prefix )
+	    free(ts->bnode.prefix);
+	  if ( !(ts->bnode.prefix = wcsdup(prefix)) )
+	    return PL_resource_error("memory");
+	} else
+	  return FALSE;
+      }
+      if ( graph )
+      { atom_t g;
+	resource *r;
+
+	if ( !(PL_get_atom_ex(graph, &g) &&
+	       (r=atom_resource(ts, g)) &&
+	       set_graph(ts, r, NULL)) )
+	  return FALSE;
+      }
+      if ( format )
+      { atom_t d;
+
+	if ( !PL_get_atom_ex(format, &d) )
+	  return FALSE;
+	if ( d == ATOM_turtle )
+	  ts->format = D_TURTLE;
+	else if ( d == ATOM_trig )
+	  ts->format = D_TRIG;
+	else if ( d == ATOM_auto )
+	  ts->format = D_AUTO;
+	else
+	  return PL_domain_error("format_option", format);
+      }
+      if ( on_error )
+      { atom_t mode;
+
+	if ( !PL_get_atom_ex(on_error, &mode) )
+	  return FALSE;
+	if ( mode == ATOM_error )
+	  ts->on_error = E_ERROR;
+	else if ( mode == ATOM_warning )
+	  ts->on_error = E_WARNING;
+	else
+	  return PL_domain_error("on_error_option", on_error);
+      }
 
       if ( ts->format == D_TRIG &&
 	   ts->current_graph )
@@ -3271,53 +3248,37 @@ destroy_turtle_parser(term_t parser)
 }
 
 
+static PL_option_t turtle_parse_options[] =
+{ PL_OPTION("parse", OPT_TERM),
+  PL_OPTION("count", OPT_TERM),
+  PL_OPTIONS_END
+};
+
 static foreign_t
 turtle_parse(term_t parser, term_t triples, term_t options)
 { turtle_state *ts;
 
   if ( get_turtle_parser(parser, &ts) )
   { term_t tail  = PL_copy_term_ref(triples);
-    term_t opt   = PL_new_term_ref();
-    term_t arg   = PL_new_term_ref();
-    term_t opts  = PL_copy_term_ref(options);
     term_t count = 0;
     int	parse_document = TRUE;
+    term_t parse = 0;
 
-    while(PL_get_list_ex(opts, opt, opts))
-    { atom_t name;
-      size_t arity;
-
-      if ( PL_get_name_arity(opt, &name, &arity) )
-      { if ( arity == 1 )
-	{ _PL_get_arg(1, opt, arg);
-
-	  if ( name == ATOM_parse )			/* PARSE */
-	  { atom_t what;
-
-	    if ( PL_get_atom_ex(arg, &what) )
-	    { if ( what == ATOM_statement )
-		parse_document = FALSE;
-	      else if ( what == ATOM_document )
-		parse_document = TRUE;
-	      else
-		return PL_domain_error("parse_option", arg);
-
-	      continue;
-	    }
-	    return FALSE;
-	  }
-	  if ( name == ATOM_count )			/* COUNT */
-	  { count = PL_copy_term_ref(arg);
-	    continue;
-	  }
-	  continue;			/* ignore unknown option */
-	}
-      }
-
-      return PL_type_error("option", opt);
-    }
-    if ( PL_exception(0) || !PL_get_nil_ex(opts) )
+    if ( !PL_scan_options(options, 0, "turtle_option", turtle_parse_options,
+			  &parse, &count) )
       return FALSE;
+    if ( parse )
+    { atom_t what;
+
+      if ( !PL_get_atom_ex(parse, &what) )
+	return FALSE;
+      if ( what == ATOM_statement )
+	parse_document = FALSE;
+      else if ( what == ATOM_document )
+	parse_document = TRUE;
+      else
+	return PL_domain_error("parse_option", parse);
+    }
 
     if ( !count )
     { ts->head = PL_new_term_ref();
@@ -3967,19 +3928,12 @@ install_turtle(void)
   MKFUNCTOR(type,	     2);
   MKFUNCTOR(node,	     1);
 
-  MKATOM(parse);
   MKATOM(statement);
   MKATOM(document);
-  MKATOM(count);
-  MKATOM(anon_prefix);
-  MKATOM(base_uri);
-  MKATOM(on_error);
   MKATOM(error);
   MKATOM(warning);
-  MKATOM(format);
   MKATOM(turtle);
   MKATOM(trig);
-  MKATOM(graph);
   MKATOM(auto);
 
   PL_register_foreign("create_turtle_parser",  3, create_turtle_parser,  0);
